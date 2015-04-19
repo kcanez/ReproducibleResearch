@@ -1,0 +1,88 @@
+---
+output: html_document
+---
+#Peer Assessment 1
+Note: Code assumes you have downloaded the Actity Monitoring Dataset found at https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip
+
+##Total Number of Steps Taken Per Day:
+```{r echo=FALSE, results='hide',include=FALSE}
+library(sqldf)
+```
+
+```{r message=FALSE}
+ActivityData <- read.csv(file = "activity.csv")
+ActivityDataProcessed <- na.omit(ActivityData)
+StepsPerDay <- sqldf("SELECT date, sum(steps) as 'TotalSteps', median(steps) as 'MedianSteps', avg(steps) as 'MeanSteps' FROM ActivityDataProcessed GROUP BY date ORDER BY date")
+hist(StepsPerDay$TotalSteps, main = "Histogram of Total Steps Taken per Day", xlab = "Total Steps", col = "green")
+```
+
+Mean and Median Steps Per Day
+```{r}
+StepsPerDay
+```
+
+Mean and Median steps per day across whole study
+```{r}
+mean(StepsPerDay$TotalSteps)
+median(StepsPerDay$TotalSteps)
+```
+
+##What is the average daily activity pattern?
+```{r message=FALSE}
+StepsPerInterval <- sqldf("SELECT interval, sum(steps) as 'TotalSteps', median(steps) as 'MedianSteps', avg(steps) as 'MeanSteps' FROM ActivityDataProcessed GROUP BY interval ORDER BY interval")
+plot(x = StepsPerInterval$interval, y = StepsPerInterval$MeanSteps, type = "l", xlab = "Time Interval", ylab = "Mean Number of Steps")
+```
+
+Max average steps interval is 835, found below:
+```{r}
+StepsPerInterval[which.max(StepsPerInterval$MeanSteps), ]
+
+```
+
+##Imputing missing values
+```{r}
+NumMissingVals <- length(ActivityData$steps) - length(ActivityDataProcessed$steps)
+PercentMissing <- (NumMissingVals/length(ActivityData$steps))*100
+```
+There are `r NumMissingVals` NAs in the Activity Monitoring Dataset, approximately `r PercentMissing`%!
+
+With a simple for loop you can replace the NA values with the mean steps per a given interval:
+```{r}
+ActivityDataCopy <- ActivityData
+
+for(i in 1:length(ActivityDataCopy$steps)) 
+{
+  if(is.na(ActivityDataCopy[i,]$steps)) 
+    {
+      ActivityDataCopy[i,]$steps <- StepsPerInterval[StepsPerInterval$interval == ActivityDataCopy[i,]$interval, ]$MeanSteps 
+    } 
+}
+```
+As you can See I have created a copy of the ActivityData data.frame in order to not pollute the original ActivityData.
+
+This, however has no affect on the summary data, as shown below
+```{r}
+StepsPerDayFromCopyData <- sqldf("SELECT date, avg(steps) as 'MeanStepsWithAddedValues' FROM ActivityDataCopy GROUP BY date ORDER BY date")
+AffectOfInput <- merge(StepsPerDay, StepsPerDayFromCopyData, by = "date")
+AffectOfInput[c(1,4,5)]
+```
+
+##Are there differences in activity patterns between weekdays and weekends?
+```{r}
+ActivityDataCopy$DayOfWeek <- weekdays(as.POSIXct(ActivityDataCopy$date))
+DayOfWeekActivityData <- sqldf("SELECT steps, date, interval, CASE SUBSTR(DayOfWeek, 1,1) WHEN 'S' THEN 'WEEKEND' ELSE 'WEEKDAY' END As 'DayOfWeek' FROM ActivityDataCopy")
+DayOfWeekActivityDataSummary <- sqldf("SELECT interval, DayOfWeek, avg(steps) AS 'MeanSteps' FROM DayOfWeekActivityData GROUP BY interval, DayOfWeek ORDER BY interval, DayOfWeek")
+
+plot(x = DayOfWeekActivityDataSummary[DayOfWeekActivityDataSummary$DayOfWeek == "WEEKDAY", ]$interval, y = DayOfWeekActivityDataSummary[DayOfWeekActivityDataSummary$DayOfWeek == "WEEKDAY", ]$MeanSteps, type = "l", xlab = "interval", ylab = "average number of steps", main = "Average Steps Per Interval (WEEKDAY)")
+
+plot(x = DayOfWeekActivityDataSummary[DayOfWeekActivityDataSummary$DayOfWeek == "WEEKEND", ]$interval, y = DayOfWeekActivityDataSummary[DayOfWeekActivityDataSummary$DayOfWeek == "WEEKEND", ]$MeanSteps, type = "l",xlab = "interval", ylab = "average number of steps", main = "Average Steps Per Interval (WEEKEND)")
+```
+
+The graphs above show that although peoples days generally started later, they were more active throughout the day.
+
+
+
+
+
+
+
